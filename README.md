@@ -1,6 +1,6 @@
 # Rust Song Request Manager
 
-A Rust-based application that allows users to request YouTube songs by title. The app retrieves the closest YouTube video match using the YouTube Data API and manages song queues with playlist support.
+A Rust-based application that allows users to request YouTube songs by title. The app retrieves the closest YouTube video match using the YouTube Data API and manages song queues with playlist support and smart recommendations.
 
 ## Features
 
@@ -12,6 +12,8 @@ A Rust-based application that allows users to request YouTube songs by title. Th
 - Smart recommendations that avoid compilations and recently played songs
 - **Playlist Queue**: Separate queue for playlist songs with automatic cleanup
 - **Pagination**: Fetch unlimited songs from YouTube playlists (up to 1000)
+- **Fallback System**: Main queue → Playlist queue → Recommendations
+- **No YouTube Shorts**: Filters out short-form content and very short videos
 
 ## Setup
 

@@ -108,26 +108,62 @@ impl YouTubeAPI {
             "songs", "tracks", "compilation", "non stop", "nonstop",
             "back to back", "b2b", "music collection", "jukeboxes", "jukebox",
             "all songs", "audio songs", "video songs", "chart", "songs",
+            "full album", "album", "live concert", "concert", "live performance",
+            "extended", "remix", "version", "cover", "covers", "acoustic",
+            "karaoke", "instrumental", "piano", "guitar", "drum", "bass",
+            "long", "extended", "full", "complete", "entire", "whole",
+            "shorts", "short", "vertical", "tiktok", "reels", "ig", "instagram",
+            "youtube shorts", "yt shorts", "short video", "short clip", "quick", "brief", 
+            "mini", "tiny", "small", "quick song", "30 second", "1 minute", "2 minute", 
+            "3 minute", "under 1 min", "under 2 min", "under 3 min"
         ];
 
         let excluded_content_keywords = [
             "indian", "hindi", "bollywood", "tamil", "telugu", "punjabi",
             "bhangra", "desi", "carnatic", "bharatanatyam",
+            "chinese", "mandarin", "cantonese", "japanese", "korean", "thai",
+            "vietnamese", "arabic", "spanish", "french", "german", "italian",
+            "portuguese", "russian", "dutch", "swedish", "norwegian", "danish"
         ];
 
-        let search_queries = ["official music"];
-        let query = search_queries[0]; // For now, use the first query
+        // Diverse search queries for better variety (Indonesian and English focus)
+        let search_queries = [
+            "popular music",
+            "trending songs",
+            "hit music",
+            "new music",
+            "music video",
+            "song",
+            "music",
+            "artist",
+            "band",
+            "singer",
+            "lagu indonesia",
+            "musik indonesia",
+            "indonesian music",
+            "lagu pop indonesia",
+            "indonesian pop"
+        ];
+        
+        // Randomly select a query for variety
+        use rand::seq::SliceRandom;
+        let query = search_queries.choose(&mut rand::thread_rng()).unwrap();
 
         let url = "https://www.googleapis.com/youtube/v3/search";
+        
+        // Randomly vary search parameters for more diversity
+        let order_options = ["relevance", "date", "rating", "viewCount"];
+        let order = order_options.choose(&mut rand::thread_rng()).unwrap();
+        
         let params = [
             ("part", "snippet"),
             ("q", query),
             ("type", "video"),
             ("videoCategoryId", "10"), // Music category
-            ("maxResults", "25"),
+            ("maxResults", "50"), // Increased for more variety
             ("key", &self.api_key),
-            ("relevanceLanguage", "en"),
-            ("videoDuration", "short"),
+            ("relevanceLanguage", "id"), // Indonesian language preference
+            ("order", order),
         ];
 
         let response = self.client.get(url).query(&params).send().await?;
@@ -156,10 +192,29 @@ impl YouTubeAPI {
                     desc_lower.contains(keyword)
                 });
 
-                // Check for duration indicators
+                // Check for duration indicators (more strict)
                 let has_duration = title_lower.contains("minute") || 
                                  title_lower.contains("hour") ||
-                                 regex::Regex::new(r"\d+\s*min").unwrap().is_match(&title_lower);
+                                 title_lower.contains("min") ||
+                                 title_lower.contains("hr") ||
+                                 regex::Regex::new(r"\d+\s*(min|minute|hr|hour)").unwrap().is_match(&title_lower);
+
+                // Check for YouTube Shorts specifically
+                let is_youtube_shorts = title_lower.contains("#shorts") || 
+                                       title_lower.contains("youtube shorts") ||
+                                       title_lower.contains("yt shorts") ||
+                                       title_lower.contains("short video") ||
+                                       title_lower.contains("short clip") ||
+                                       desc_lower.contains("#shorts") ||
+                                       desc_lower.contains("youtube shorts") ||
+                                       channel_lower.contains("shorts") ||
+                                       regex::Regex::new(r"#shorts").unwrap().is_match(&title_lower) ||
+                                       regex::Regex::new(r"#shorts").unwrap().is_match(&desc_lower) ||
+                                       regex::Regex::new(r"\d+\s*(second|sec)").unwrap().is_match(&title_lower) ||
+                                       regex::Regex::new(r"under\s+\d+\s*(min|minute)").unwrap().is_match(&title_lower);
+
+                // Check for any hashtag symbols (exclude all videos with #)
+                let has_hashtag = title_lower.contains("#") || desc_lower.contains("#");
 
                 // Check if recently recommended
                 let is_recently_recommended = recent_set.contains(&item.id.video_id);
@@ -167,7 +222,7 @@ impl YouTubeAPI {
                 // Check title length (very long titles often indicate compilations)
                 let is_too_long = title_lower.len() > 70 && title_lower.split_whitespace().count() > 10;
 
-                !is_compilation && !is_excluded_content && !has_duration && !is_recently_recommended && !is_too_long
+                !is_compilation && !is_excluded_content && !has_duration && !is_youtube_shorts && !has_hashtag && !is_recently_recommended && !is_too_long
             })
             .collect();
 
@@ -195,10 +250,14 @@ impl YouTubeAPI {
                 })
             }
         } else {
-            // Pick a random item from filtered results
+            // Pick a truly random item from filtered results
             use rand::seq::SliceRandom;
-            let mut rng = rand::thread_rng();
-            let item = filtered_items.choose(&mut rng).unwrap();
+            
+            // Shuffle the entire list for better randomness
+            let mut shuffled_items = filtered_items.clone();
+            shuffled_items.shuffle(&mut rand::thread_rng());
+            
+            let item = shuffled_items.first().unwrap();
             
             Ok(YouTubeSearchResult {
                 title: item.snippet.title.clone(),
