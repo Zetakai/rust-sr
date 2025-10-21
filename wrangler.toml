@@ -1,4 +1,4 @@
-name = "rust-sr"
+name = "sr"
 main = "dist/worker.js"
 compatibility_date = "2024-10-21"
 
