@@ -31,3 +31,19 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cloudflare Workers
+worker/pkg/
+worker/target/
+dist/
+
+# WASM build artifacts
+*.wasm
+*.js.map
+pkg/

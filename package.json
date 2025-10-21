@@ -1,0 +1,14 @@
+{
+  "name": "rust-sr-worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "cd worker && wasm-pack build --target web --out-dir ../dist",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "clean": "rm -rf dist/ worker/pkg/ worker/target/"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}
