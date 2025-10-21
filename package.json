@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "cd worker && wasm-pack build --target web --out-dir ../dist",
+    "build": "bash build.sh",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "clean": "rm -rf dist/ worker/pkg/ worker/target/"
