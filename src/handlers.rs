@@ -120,10 +120,26 @@ pub async fn get_oldest_song(db: Database, youtube_api: YouTubeAPI, playlist_id:
                     Ok(json(&song))
                 }
                 Ok(None) => {
-                    // Playlist queue is also empty, return error
-                    Ok(json(&serde_json::json!({
-                        "error": "No songs in queue or playlist"
-                    })))
+                    // Both queues are empty, get a recommendation
+                    match youtube_api.get_recommendation(&[]).await {
+                        Ok(recommendation) => {
+                            // Store the recommendation in the database
+                            let _ = db.store_recommendation(&recommendation.video_id).await;
+                            
+                            // Convert to YouTubeURL format
+                            let song = YouTubeURL {
+                                id: None,
+                                title: recommendation.title,
+                                url: recommendation.url,
+                                user: "System".to_string(),
+                                created_at: None,
+                            };
+                            Ok(json(&song))
+                        }
+                        Err(_) => Ok(json(&serde_json::json!({
+                            "error": "No songs available and no recommendations found"
+                        }))),
+                    }
                 }
                 Err(_) => Ok(json(&serde_json::json!({
                     "error": "Error fetching playlist song"
