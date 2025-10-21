@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Song Requests Manager</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #f4f4f4;
+        padding: 20px;
+      }
+
+      h1 {
+        color: #333;
+      }
+
+      #url-form {
+        margin-bottom: 20px;
+      }
+
+      #url-form input[type="text"] {
+        width: 80%;
+        padding: 10px;
+        margin-right: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+
+      #url-form button {
+        padding: 10px 15px;
+        border: none;
+        background-color: #28a745;
+        color: #fff;
+        cursor: pointer;
+        border-radius: 4px;
+        margin-right: 5px;
+      }
+
+      #url-list {
+        margin-top: 20px;
+      }
+
+      .url-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px;
+        background: #fff;
+        border: 1px solid #ddd;
+        margin-bottom: 5px;
+      }
+
+      .recommended {
+        background-color: #f8f9fa;
+        border-left: 3px solid #007bff;
+      }
+
+      .url-item button {
+        padding: 5px 10px;
+        border: none;
+        background-color: #dc3545;
+        color: #fff;
+        cursor: pointer;
+        border-radius: 4px;
+      }
+
+      iframe {
+        margin-top: 20px;
+        border: none;
+        width: 100%;
+        height: 450px;
+      }
+
+      .playlist-section {
+        margin-top: 20px;
+        padding: 15px;
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+
+      .playlist-select {
+        width: 100%;
+        padding: 10px;
+        margin: 10px 0;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+
+      .playlist-buttons {
+        margin: 10px 0;
+      }
+
+      .playlist-buttons button {
+        padding: 8px 15px;
+        margin-right: 10px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      .btn-primary {
+        background-color: #007bff;
+        color: white;
+      }
+
+      .btn-secondary {
+        background-color: #6c757d;
+        color: white;
+      }
+    </style>
+    <script src="https://www.youtube.com/iframe_api"></script>
+  </head>
+
+  <body>
+    <h1>Song Requests Manager</h1>
+
+    <div id="url-form">
+      <input type="text" id="new-url" placeholder="Enter song title" />
+      <button onclick="addURL()">Add Song</button>
+      <button onclick="skipSong()">Skip Song</button>
+      <button onclick="fetchURLs()">Reload Queue</button>
+    </div>
+
+    <div class="playlist-section">
+      <h3>Playlist Queue</h3>
+      <div id="playlist-form">
+        <input type="text" id="playlist-url" placeholder="Paste YouTube playlist URL here" style="width: 70%; padding: 8px; margin-right: 10px;" />
+        <button onclick="addPlaylistSongs()" style="padding: 8px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Add All Songs</button>
+        <button onclick="clearPlaylistQueue()" style="padding: 8px 15px; background-color: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 5px;">Clear Queue</button>
+      </div>
+      <div id="playlist-status" style="margin-top: 10px; font-size: 14px; color: #666;"></div>
+      <div id="playlist-queue" style="margin-top: 10px; max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #f9f9f9;">
+        <h4>Playlist Queue (<span id="playlist-count">0</span> songs)</h4>
+        <div id="playlist-songs"></div>
+      </div>
+    </div>
+
+    <div id="url-list">
+      <h2>Queue</h2>
+      <div id="urls"></div>
+    </div>
+
+    <div id="player-container">
+      <div id="player"></div>
+    </div>
+
+    <script>
+      let player;
+      let isPlaying = false;
+      let playerInitialized = false;
+      let queueLoaded = false;
+      let requestingRecommendation = false;
+      let selectedPlaylistId = null;
+
+      document.addEventListener("DOMContentLoaded", () => {
+        if (window.YT && window.YT.Player) {
+          initializePlayer();
+        } else {
+          window.onYouTubeIframeAPIReady = initializePlayer;
+        }
+
+        fetchURLs();
+        loadPlaylists();
+        document
+          .getElementById("new-url")
+          .addEventListener("keypress", function (e) {
+            if (e.key === "Enter") addURL();
+          });
+
+        // Handle playlist selection
+        document.getElementById("playlist-select").addEventListener("change", function(e) {
+          selectedPlaylistId = e.target.value ? parseInt(e.target.value) : null;
+          console.log("Selected playlist ID:", selectedPlaylistId);
+        });
+      });
+
+      function initializePlayer() {
+        if (player) player.destroy();
+
+        player = new YT.Player("player", {
+          height: "450",
+          width: "100%",
+          events: {
+            onReady: onPlayerReady,
+            onStateChange: onPlayerStateChange,
+            onError: handlePlayerError,
+          },
+        });
+        playerInitialized = true;
+      }
+
+      function onPlayerReady() {
+        if (!queueLoaded) {
+          playNextInQueue();
+          queueLoaded = true;
+        }
+      }
+
+      function onPlayerStateChange(event) {
+        if (event.data === YT.PlayerState.ENDED) {
+          isPlaying = false;
+          skipSong();
+        } else if (event.data === YT.PlayerState.PLAYING) {
+          isPlaying = true;
+        }
+      }
+
+      function handlePlayerError(event) {
+        console.error("YouTube Player error:", event.data);
+        skipSong();
+      }
+
+      function fetchURLs() {
+        fetch("/urls")
+          .then((response) => response.json())
+          .then((data) => {
+            const urlList = document.getElementById("urls");
+            urlList.innerHTML = "";
+
+            data.forEach((urlObj) => {
+              const div = document.createElement("div");
+              div.className = "url-item";
+              if (urlObj.user === "Recommended") {
+                div.className += " recommended";
+              }
+              div.innerHTML = `
+                <span><strong>${urlObj.user}</strong> - ${urlObj.title}</span>
+                <button onclick="deleteURL('${urlObj.url}')">Delete</button>
+              `;
+              urlList.appendChild(div);
+            });
+
+            // Queue is empty - backend will handle fallback to playlist queue
+            loadPlaylistQueue(); // Always refresh playlist queue display
+          })
+          .catch((err) => console.error("Error fetching URLs:", err));
+      }
+
+      function getAndAddRecommendation() {
+        // Prevent multiple simultaneous requests
+        if (requestingRecommendation) return;
+        
+        requestingRecommendation = true;
+        
+        // Check if we have a selected playlist
+        if (selectedPlaylistId) {
+          getSongFromPlaylist();
+        } else {
+          getYouTubeRecommendation();
+        }
+      }
+
+      function getSongFromPlaylist() {
+        fetch(`/url/oldest?playlist_id=${selectedPlaylistId}`)
+          .then((response) => response.json())
+          .then((data) => {
+            if (data && data.url && !data.error) {
+              // The song is already in the queue, just refresh the display
+              fetchURLs();
+            } else {
+              // Playlist is empty or error, fallback to YouTube recommendation
+              console.log("Playlist empty or error:", data.error);
+              getYouTubeRecommendation();
+            }
+          })
+          .catch((err) => {
+            console.error("Error getting song from playlist:", err);
+            // Fallback to YouTube recommendation
+            getYouTubeRecommendation();
+          })
+          .finally(() => {
+            requestingRecommendation = false;
+          });
+      }
+
+      function getRandomPlaylistItem() {
+        fetch(`/playlists/${selectedPlaylistId}/random`)
+          .then((response) => response.json())
+          .then((data) => {
+            if (data && data.url) {
+              addRecommendationToQueue(data);
+            } else {
+              // Fallback to YouTube recommendation if playlist is empty
+              getYouTubeRecommendation();
+            }
+          })
+          .catch((err) => {
+            console.error("Error getting playlist item:", err);
+            // Fallback to YouTube recommendation
+            getYouTubeRecommendation();
+          })
+          .finally(() => {
+            requestingRecommendation = false;
+          });
+      }
+
+      function getYouTubeRecommendation() {
+        fetch("/recommendation")
+          .then((response) => response.json())
+          .then((data) => {
+            if (data && data.url) {
+              addRecommendationToQueue(data);
+            }
+          })
+          .catch((err) => {
+            console.error("Error getting recommendation:", err);
+          })
+          .finally(() => {
+            requestingRecommendation = false;
+          });
+      }
+
+      function addRecommendationToQueue(recommendation) {
+        fetch("/url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            title: recommendation.title,
+            url: recommendation.url,
+            user: "Recommended"
+          }),
+        })
+        .then((response) => {
+          if (response.ok) {
+            fetchURLs();
+            
+            // If nothing is playing, start playing
+            if (!isPlaying && playerInitialized) {
+              playNextInQueue();
+            }
+          }
+        })
+        .catch((err) => console.error("Error adding recommendation to queue:", err));
+      }
+
+      function addURL() {
+        const title = document.getElementById("new-url").value;
+        if (!title) return;
+
+        fetch("/url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, user: "Host" }),
+        })
+          .then((response) => {
+            if (response.ok) {
+              document.getElementById("new-url").value = "";
+              fetchURLs();
+              
+              // If nothing is playing, play the song that was just added
+              if (!isPlaying && playerInitialized) {
+                playNextInQueue();
+              }
+            } else {
+              alert("Error adding song.");
+            }
+          })
+          .catch((err) => console.error("Error adding song:", err));
+      }
+
+      function deleteURL(url) {
+        fetch("/url", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        })
+          .then((response) => {
+            if (response.ok) fetchURLs();
+            else alert("Error deleting song.");
+          })
+          .catch((err) => console.error("Error deleting song:", err));
+      }
+
+      function playVideo(url) {
+        const videoID = extractVideoID(url);
+        if (videoID && player) {
+          player.loadVideoById(videoID);
+          isPlaying = true;
+        }
+      }
+
+      function playNextInQueue() {
+        fetch("/url/oldest")
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error("No songs in queue");
+            }
+            return response.json();
+          })
+          .then((data) => {
+            if (data && data.url) {
+              playVideo(data.url);
+              fetchURLs();
+              loadPlaylistQueue(); // Refresh playlist queue display
+            }
+          })
+          .catch((err) => {
+            console.log("Error or empty queue:", err.message);
+          });
+      }
+
+      function skipSong() {
+        playNextInQueue();
+      }
+
+      function extractVideoID(url) {
+        const regex =
+          /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+        const match = url.match(regex);
+        return match ? match[1] : null;
+      }
+
+      // Playlist management functions
+      function loadPlaylists() {
+        fetch("/playlists")
+          .then((response) => response.json())
+          .then((playlists) => {
+            const select = document.getElementById("playlist-select");
+            select.innerHTML = '<option value="">Select a playlist to play from when queue is empty</option>';
+            
+            playlists.forEach(playlist => {
+              const option = document.createElement("option");
+              option.value = playlist.id;
+              option.textContent = playlist.name;
+              select.appendChild(option);
+            });
+          })
+          .catch((err) => console.error("Error loading playlists:", err));
+      }
+
+      function createPlaylist() {
+        const name = prompt("Enter playlist name:");
+        if (!name) return;
+
+        const description = prompt("Enter playlist description (optional):");
+        
+        const youtubeUrl = prompt("Enter YouTube playlist URL (e.g., https://www.youtube.com/watch?v=VIDEO_ID&list=PLAYLIST_ID):");
+        if (!youtubeUrl) return;
+
+        fetch("/playlists", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            name: name,
+            description: description || null,
+            youtube_playlist_url: youtubeUrl
+          }),
+        })
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.id) {
+            alert("Playlist created successfully!");
+            loadPlaylists();
+          } else {
+            alert("Error creating playlist.");
+          }
+        })
+        .catch((err) => console.error("Error creating playlist:", err));
+      }
+
+      // Playlist queue functions
+      function addPlaylistSongs() {
+        const playlistUrl = document.getElementById("playlist-url").value;
+        if (!playlistUrl) {
+          alert("Please enter a playlist URL");
+          return;
+        }
+
+        document.getElementById("playlist-status").textContent = "Adding songs from playlist...";
+        
+        fetch("/playlist-queue", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ playlist_url: playlistUrl }),
+        })
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.message) {
+            document.getElementById("playlist-status").textContent = data.message;
+            document.getElementById("playlist-url").value = "";
+            loadPlaylistQueue();
+          } else {
+            document.getElementById("playlist-status").textContent = "Error: " + (data.error || "Unknown error");
+          }
+        })
+        .catch((err) => {
+          console.error("Error adding playlist songs:", err);
+          document.getElementById("playlist-status").textContent = "Error adding playlist songs";
+        });
+      }
+
+      function loadPlaylistQueue() {
+        fetch("/playlist-queue")
+          .then((response) => response.json())
+          .then((data) => {
+            const container = document.getElementById("playlist-songs");
+            const countElement = document.getElementById("playlist-count");
+            
+            if (Array.isArray(data)) {
+              countElement.textContent = data.length;
+              container.innerHTML = data.map(song => 
+                `<div style="padding: 5px; border-bottom: 1px solid #eee; font-size: 12px;">
+                  <strong>${song.title}</strong><br>
+                  <small style="color: #666;">${song.url}</small>
+                </div>`
+              ).join("");
+            } else {
+              countElement.textContent = "0";
+              container.innerHTML = "<div style='color: #666; font-style: italic;'>No songs in playlist queue</div>";
+            }
+          })
+          .catch((err) => console.error("Error loading playlist queue:", err));
+      }
+
+      function clearPlaylistQueue() {
+        if (!confirm("Are you sure you want to clear the playlist queue?")) return;
+        
+        fetch("/playlist-queue", { method: "DELETE" })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.message) {
+              document.getElementById("playlist-status").textContent = data.message;
+              loadPlaylistQueue();
+            } else {
+              document.getElementById("playlist-status").textContent = "Error: " + (data.error || "Unknown error");
+            }
+          })
+          .catch((err) => {
+            console.error("Error clearing playlist queue:", err);
+            document.getElementById("playlist-status").textContent = "Error clearing playlist queue";
+          });
+      }
+
+      // Load playlist queue on page load
+      document.addEventListener("DOMContentLoaded", () => {
+        loadPlaylistQueue();
+      });
+    </script>
+  </body>
+</html>
